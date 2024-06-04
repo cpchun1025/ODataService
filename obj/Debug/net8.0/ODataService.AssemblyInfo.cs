@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ODataService")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0afcb7ff382d7c36dd9eecc354096e2f946a4b69")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0997c1db6d3497cee6f3bc7dde40122a53392891")]
 [assembly: System.Reflection.AssemblyProductAttribute("ODataService")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ODataService")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
