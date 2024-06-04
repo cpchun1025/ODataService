@@ -1,0 +1,140 @@
+To use an MSSQL database as an OData data source for your DevExtreme DataGrid in a React application, you need to set up an OData service that exposes your MSSQL data. One common way to do this is by using ASP.NET Core with the OData library to create an OData endpoint. Below are the steps to achieve this:
+
+Set Up the ASP.NET Core OData Service:
+Create a new ASP.NET Core project:
+bash
+Copy
+dotnet new webapi -n ODataService
+cd ODataService
+Install the necessary packages:
+bash
+Copy
+dotnet add package Microsoft.AspNetCore.OData
+dotnet add package Microsoft.EntityFrameworkCore.SqlServer
+Configure the MSSQL database connection in appsettings.json:
+json
+Copy
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=your_server;Database=your_database;User Id=your_user;Password=your_password;"
+  }
+}
+Create the Entity and DbContext classes:
+csharp
+Copy
+// Models/Task.cs
+public class Task
+{
+    public int Task_ID { get; set; }
+    public string Task_Subject { get; set; }
+    public DateTime Task_Start_Date { get; set; }
+    public DateTime Task_Due_Date { get; set; }
+    public string Task_Status { get; set; }
+    public int Task_Priority { get; set; }
+    public int Task_Completion { get; set; }
+    public string ResponsibleEmployee { get; set; }
+}
+
+// Data/ApplicationDbContext.cs
+public class ApplicationDbContext : DbContext
+{
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
+
+    public DbSet<Task> Tasks { get; set; }
+}
+Configure the OData endpoint and middleware:
+csharp
+Copy
+// Startup.cs or Program.cs
+public void ConfigureServices(IServiceCollection services)
+{
+    services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection")));
+
+    services.AddControllers().AddOData(opt => opt
+        .Select()
+        .Expand()
+        .Filter()
+        .OrderBy()
+        .SetMaxTop(100)
+        .Count()
+        .AddRouteComponents("odata", GetEdmModel()));
+
+    // Register the Swagger generator, defining 1 or more Swagger documents
+    services.AddSwaggerGen();
+}
+
+private static IEdmModel GetEdmModel()
+{
+    var odataBuilder = new ODataConventionModelBuilder();
+    odataBuilder.EntitySet<Task>("Tasks");
+    return odataBuilder.GetEdmModel();
+}
+
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+{
+    if (env.IsDevelopment())
+    {
+        app.UseDeveloperExceptionPage();
+    }
+
+    app.UseRouting();
+
+    app.UseEndpoints(endpoints =>
+    {
+        endpoints.MapControllers();
+    });
+
+    // Enable middleware to serve generated Swagger as a JSON endpoint.
+    app.UseSwagger();
+    // Enable middleware to serve swagger-ui (HTML, JS, CSS, etc.),
+    // specifying the Swagger JSON endpoint.
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "My API V1");
+    });
+}
+Create the Controller:
+csharp
+Copy
+// Controllers/TasksController.cs
+[Route("odata/[controller]")]
+[ApiController]
+public class TasksController : ODataController
+{
+    private readonly ApplicationDbContext _context;
+
+    public TasksController(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    [EnableQuery]
+    public IActionResult Get()
+    {
+        return Ok(_context.Tasks);
+    }
+}
+Run the ASP.NET Core Project:
+bash
+Copy
+dotnet run
+This will start your server and host the OData service.
+Update the React Component to Use the New OData Endpoint: Update the dataSource in your React component to point to your new OData endpoint. For example, if your ASP.NET Core service is running locally on port 5000, update the URL as follows:
+javascript
+Copy
+const dataSource = {
+  store: {
+    type: 'odata',
+    url: 'https://localhost:5000/odata/Tasks',
+    key: 'Task_ID',
+  },
+  expand: 'ResponsibleEmployee',
+  select: [
+    'Task_ID',
+    'Task_Subject',
+    'Task_Start_Date',
+    'Task_Due_Date',
+    'Task_Status',
+    'Task_Priority',
+    'Task_Completion',
