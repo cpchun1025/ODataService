@@ -1,0 +1,83 @@
+To transform an HTML table within an email content into a data object in C#, you can use an HTML parser library like HtmlAgilityPack. This library allows you to parse and manipulate HTML documents easily.
+
+Here's a step-by-step guide on how to achieve this:
+
+Install HtmlAgilityPack: First, you need to install the HtmlAgilityPack NuGet package:
+bash
+Copy
+dotnet add package HtmlAgilityPack
+Parse the HTML and Extract the Table Data: Create a method to parse the HTML content, find the table, and extract its data into a C# object. Here’s an example:
+csharp
+Copy
+using HtmlAgilityPack;
+using System;
+using System.Collections.Generic;
+
+public class EmailData
+{
+    public int Id { get; set; }
+    public string EmailFrom { get; set; }
+    public string EmailTo { get; set; }
+    public string HtmlContent { get; set; }
+    public List<TableRow> TableRows { get; set; } = new List<TableRow>();
+}
+
+public class TableRow
+{
+    public List<string> Cells { get; set; } = new List<string>();
+}
+
+public class HtmlTableParser
+{
+    public static List<TableRow> ParseHtmlTable(string htmlContent)
+    {
+        var tableRows = new List<TableRow>();
+
+        var doc = new HtmlDocument();
+        doc.LoadHtml(htmlContent);
+
+        var table = doc.DocumentNode.SelectSingleNode("//table");
+        if (table != null)
+        {
+            foreach (var row in table.SelectNodes("tr"))
+            {
+                var tableRow = new TableRow();
+                foreach (var cell in row.SelectNodes("th|td"))
+                {
+                    tableRow.Cells.Add(cell.InnerText.Trim());
+                }
+                tableRows.Add(tableRow);
+            }
+        }
+
+        return tableRows;
+    }
+}
+
+class Program
+{
+    static void Main()
+    {
+        var emailData = new EmailData
+        {
+            Id = 1,
+            EmailFrom = "from@example.com",
+            EmailTo = "to@example.com",
+            HtmlContent = "<html><body><table><tr><th>Header1</th><th>Header2</th></tr><tr><td>Data1</td><td>Data2</td></tr></table></body></html>"
+        };
+
+        emailData.TableRows = HtmlTableParser.ParseHtmlTable(emailData.HtmlContent);
+
+        foreach (var row in emailData.TableRows)
+        {
+            Console.WriteLine(string.Join(", ", row.Cells));
+        }
+    }
+}
+In this example:
+EmailData class represents your data model with the HTML content and parsed table rows.
+TableRow class represents a row in the table.
+HtmlTableParser class contains a method ParseHtmlTable to parse the HTML content and extract the table rows into a list of TableRow objects.
+In the Main method, an instance of EmailData is created with a sample HTML content containing a table. The HTML table is then parsed, and the table rows are printed.
+Expand as Necessary: Depending on your actual HTML structure and requirements, you might need to adjust the parsing logic. The example above assumes a simple table structure. If your HTML is more complex, you might need to handle nested tables, different table structures, or additional HTML elements.
+This should give you a good starting point to transform HTML table content into a structured C# data object.

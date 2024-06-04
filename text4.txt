@@ -1,0 +1,453 @@
+To achieve your goal of displaying emails with their content in a DevExtreme DataGrid in a React application, you need to follow these steps:
+
+Set Up the Backend:
+Create an ASP.NET Core API that fetches the email data from your database.
+Parse the HTML content of the email to extract relevant information.
+Expose an endpoint to serve this data via OData.
+Set Up the Frontend:
+Create a React application with DevExtreme DataGrid.
+Fetch the email data from the backend OData endpoint.
+Display the data in the DataGrid, allowing users to interact with it.
+Step 1: Set Up the Backend
+1.1 Create ASP.NET Core API
+Create a new ASP.NET Core project:
+bash
+Copy
+dotnet new webapi -n EmailService
+cd EmailService
+Install the necessary packages:
+bash
+Copy
+dotnet add package Microsoft.AspNetCore.OData
+dotnet add package Microsoft.EntityFrameworkCore.SqlServer
+dotnet add package HtmlAgilityPack
+Configure the MSSQL database connection in appsettings.json:
+json
+Copy
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=your_server;Database=your_database;User Id=your_user;Password=your_password;"
+  }
+}
+Create the Entity and DbContext classes:
+csharp
+Copy
+// Models/Email.cs
+public class Email
+{
+    public int Id { get; set; }
+    public string EmailFrom { get; set; }
+    public string EmailTo { get; set; }
+    public string HtmlContent { get; set; }
+}
+
+// Data/ApplicationDbContext.cs
+public class ApplicationDbContext : DbContext
+{
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
+
+    public DbSet<Email> Emails { get; set; }
+}
+Create a method to parse the HTML content:
+csharp
+Copy
+// Services/HtmlTableParser.cs
+using HtmlAgilityPack;
+using System.Collections.Generic;
+
+public class TableRow
+{
+    public List<string> Cells { get; set; } = new List<string>();
+}
+
+public class HtmlTableParser
+{
+    public static List<TableRow> ParseHtmlTable(string htmlContent)
+    {
+        var tableRows = new List<TableRow>();
+
+        var doc = new HtmlDocument();
+        doc.LoadHtml(htmlContent);
+
+        var table = doc.DocumentNode.SelectSingleNode("//table");
+        if (table != null)
+        {
+            foreach (var row in table.SelectNodes("tr"))
+            {
+                var tableRow = new TableRow();
+                foreach (var cell in row.SelectNodes("th|td"))
+                {
+                    tableRow.Cells.Add(cell.InnerText.Trim());
+                }
+                tableRows.Add(tableRow);
+            }
+        }
+
+        return tableRows;
+    }
+}
+Configure the OData endpoint and middleware:
+csharp
+Copy
+// Startup.cs or Program.cs
+public void ConfigureServices(IServiceCollection services)
+{
+    services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection")));
+
+    services.AddControllers().AddOData(opt => opt
+        .Select()
+        .Expand()
+        .Filter()
+        .OrderBy()
+        .SetMaxTop(100)
+        .Count()
+        .AddRouteComponents("odata", GetEdmModel()));
+}
+
+private static IEdmModel GetEdmModel()
+{
+    var odataBuilder = new ODataConventionModelBuilder();
+    odataBuilder.EntitySet<Email>("Emails");
+    return odataBuilder.GetEdmModel();
+}
+
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+{
+    if (env.IsDevelopment())
+    {
+        app.UseDeveloperExceptionPage();
+    }
+
+    app.UseRouting();
+
+    app.UseEndpoints(endpoints =>
+    {
+        endpoints.MapControllers();
+    });
+}
+Create the Controller:
+csharp
+Copy
+// Controllers/EmailsController.cs
+[Route("odata/[controller]")]
+[ApiController]
+public class EmailsController : ODataController
+{
+    private readonly ApplicationDbContext _context;
+
+    public EmailsController(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    [EnableQuery]
+    public IActionResult Get()
+    {
+        var emails = _context.Emails.ToList();
+        foreach (var email in emails)
+        {
+            email.TableRows = HtmlTableParser.ParseHtmlTable(email.HtmlContent);
+        }
+        return Ok(emails);
+    }
+}
+Step 2: Set Up the Frontend
+To set up the frontend with a React application using DevExtreme DataGrid, follow these steps:
+
+2.1 Create a React Application
+Create a new React application:
+bash
+Copy
+npx create-react-app email-grid
+cd email-grid
+Install DevExtreme components:
+bash
+Copy
+npm install devextreme devextreme-react devextreme-aspnet-data
+Set up DevExtreme in your application:
+In src/index.js, import DevExtreme styles:
+javascript
+Copy
+import 'devextreme/dist/css/dx.light.css';
+import React from 'react';
+import ReactDOM from 'react-dom';
+import './index.css';
+import App from './App';
+import reportWebVitals from './reportWebVitals';
+
+ReactDOM.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+  document.getElementById('root')
+);
+
+reportWebVitals();
+2.2 Create the DataGrid Component
+Create a new component for the DataGrid:
+javascript
+Copy
+// src/components/EmailGrid.js
+import React from 'react';
+import DataGrid, {
+  Column,
+  Paging,
+  Pager,
+  Scrolling,
+  SearchPanel,
+} from 'devextreme-react/data-grid';
+import ODataStore from 'devextreme/data/odata/store';
+
+const EmailGrid = () => {
+  const dataSource = new ODataStore({
+    url: 'https://localhost:5000/odata/Emails',
+    key: 'Id',
+    version: 4,
+  });
+
+  return (
+    <DataGrid
+      dataSource={dataSource}
+      showBorders={true}
+      remoteOperations={true}
+      height={600}
+    >
+      <SearchPanel visible={true} />
+      <Paging defaultPageSize={10} />
+      <Pager showPageSizeSelector={true} allowedPageSizes={[5, 10, 20]} showInfo={true} />
+      <Scrolling mode="virtual" />
+
+      <Column dataField="Id" caption="ID" width={50} />
+      <Column dataField="EmailFrom" caption="From" />
+      <Column dataField="EmailTo" caption="To" />
+      <Column
+        dataField="HtmlContent"
+        caption="Content"
+        cellRender={({ value }) => (
+          <div dangerouslySetInnerHTML={{ __html: value }} />
+        )}
+      />
+    </DataGrid>
+  );
+};
+
+export default EmailGrid;
+Integrate the EmailGrid component into your application:
+javascript
+Copy
+// src/App.js
+import React from 'react';
+import EmailGrid from './components/EmailGrid';
+import './App.css';
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Email Grid</h1>
+      </header>
+      <EmailGrid />
+    </div>
+  );
+}
+
+export default App;
+Ensure CORS is enabled in your ASP.NET Core API:
+In Startup.cs or Program.cs, add CORS configuration:
+csharp
+Copy
+public void ConfigureServices(IServiceCollection services)
+{
+    services.AddCors(options =>
+    {
+        options.AddPolicy("AllowAllOrigins",
+            builder =>
+            {
+                builder.AllowAnyOrigin()
+                       .AllowAnyMethod()
+                       .AllowAnyHeader();
+            });
+    });
+
+    services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection")));
+
+    services.AddControllers().AddOData(opt => opt
+        .Select()
+        .Expand()
+        .Filter()
+        .OrderBy()
+        .SetMaxTop(100)
+        .Count()
+        .AddRouteComponents("odata", GetEdmModel()));
+}
+
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+{
+    if (env.IsDevelopment())
+    {
+        app.UseDeveloperExceptionPage();
+    }
+
+    app.UseRouting();
+
+    app.UseCors("AllowAllOrigins");
+
+    app.UseEndpoints(endpoints =>
+    {
+        endpoints.MapControllers();
+    });
+}
+Step 3: Extend Functionality
+3.1 Add Selection and Download Features
+Enable row selection and add a button for downloading the content:
+javascript
+Copy
+// src/components/EmailGrid.js
+import React, { useState } from 'react';
+import DataGrid, {
+  Column,
+  Paging,
+  Pager,
+  Scrolling,
+  SearchPanel,
+  Selection,
+} from 'devextreme-react/data-grid';
+import ODataStore from 'devextreme/data/odata/store';
+import Button from 'devextreme-react/button';
+
+const EmailGrid = () => {
+  const [selectedRows, setSelectedRows] = useState([]);
+
+  const dataSource = new ODataStore({
+    url: 'https://localhost:5000/odata/Emails',
+    key: 'Id',
+    version: 4,
+  });
+
+  const onSelectionChanged = ({ selectedRowsData }) => {
+    setSelectedRows(selectedRowsData);
+  };
+
+  const downloadContent = () => {
+    selectedRows.forEach(row => {
+      const element = document.createElement('a');
+      const file = new Blob([row.HtmlContent], { type: 'text/html' });
+      element.href = URL.createObjectURL(file);
+      element.download = `email_${row.Id}.html`;
+      document.body.appendChild(element); // Required for this to work in FireFox
+      element.click();
+    });
+  };
+
+  return (
+    <div>
+      <Button
+        text="Download Selected"
+        onClick={downloadContent}
+        disabled={selectedRows.length === 0}
+      />
+      <DataGrid
+        dataSource={dataSource}
+        showBorders={true}
+        remoteOperations={true}
+        height={600}
+        onSelectionChanged={onSelectionChanged}
+      >
+        <SearchPanel visible={true} />
+        <Paging defaultPageSize={10} />
+        <Pager showPageSizeSelector={true} allowedPageSizes={[5, 10, 20]} showInfo={true} />
+        <Scrolling mode="virtual" />
+        <Selection mode="multiple" />
+
+        <Column dataField="Id" caption="ID" width={50} />
+        <Column dataField="EmailFrom" caption="From" />
+        <Column dataField="EmailTo" caption="To" />
+        <Column
+          dataField="HtmlContent"
+          caption="Content"
+          cellRender={({ value }) => (
+            <div dangerouslySetInnerHTML={{ __html: value }} />
+          )}
+        />
+      </DataGrid>
+    </div>
+  );
+};
+
+export default EmailGrid;
+Integrate the EmailGrid component into your application:
+javascript
+Copy
+// src/App.js
+import React from 'react';
+import EmailGrid from './components/EmailGrid';
+import './App.css';
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Email Grid</h1>
+      </header>
+      <EmailGrid />
+    </div>
+  );
+}
+
+export default App;
+Ensure CORS is enabled in your ASP.NET Core API:
+In Startup.cs or Program.cs, add CORS configuration:
+csharp
+Copy
+public void ConfigureServices(IServiceCollection services)
+{
+    services.AddCors(options =>
+    {
+        options.AddPolicy("AllowAllOrigins",
+            builder =>
+            {
+                builder.AllowAnyOrigin()
+                       .AllowAnyMethod()
+                       .AllowAnyHeader();
+            });
+    });
+
+    services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection")));
+
+    services.AddControllers().AddOData(opt => opt
+        .Select()
+        .Expand()
+        .Filter()
+        .OrderBy()
+        .SetMaxTop(100)
+        .Count()
+        .AddRouteComponents("odata", GetEdmModel()));
+}
+
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+{
+    if (env.IsDevelopment())
+    {
+        app.UseDeveloperExceptionPage();
+    }
+
+    app.UseRouting();
+
+    app.UseCors("AllowAllOrigins");
+
+    app.UseEndpoints(endpoints =>
+    {
+        endpoints.MapControllers();
+    });
+}
+Summary
+With the steps provided, you should have a React application with a DevExtreme DataGrid displaying emails. Users can select multiple emails and download the HTML content of the selected emails.
+
+This setup includes:
+
+An ASP.NET Core backend serving email data with an OData endpoint.
+A React frontend using DevExtreme DataGrid to display and interact with the email data.
+Functionality for selecting rows and downloading the HTML content of the selected emails.
